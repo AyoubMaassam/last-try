@@ -1635,8 +1635,17 @@ def student_payment(request, student_id):
     )
 
     for group in enrolled_groups:
-        # All sessions for the group, ordered
-        group_sessions_qs = group.sessions.all().order_by('date', 'start_time')
+        # Get the student's enrollment date for this specific group
+        try:
+            student_group_enrollment = StudentGroup.objects.get(student=student, group=group)
+            enrollment_date = student_group_enrollment.enrollment_date
+        except StudentGroup.DoesNotExist:
+            # If no enrollment record, skip this group for payment calculation
+            # as the student shouldn't be in a group without an enrollment record.
+            continue
+
+        # All sessions for the group, filtered by enrollment date
+        group_sessions_qs = group.sessions.filter(date__gte=enrollment_date).order_by('date', 'start_time')
 
         group_total_sessions_count = group_sessions_qs.count()
         group_paid_sessions_count = 0
