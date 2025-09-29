@@ -163,7 +163,7 @@ def add_student(request):
             current_year = datetime.date.today().year
             student.card_number = f"CARD-{current_year}-{student.id:05d}"
             student.save()
-            # log_action call removed for add_student
+            log_action('student_added', f"{student.full_name}", f"تم إنشاء حساب للطالب {student.full_name} برقم بطاقة {student.card_number}.")
 
             # IMPORTANT: Redirect to the new enroll_student_in_groups view
             return redirect(reverse('enroll_student_in_groups', args=[student.id]))
@@ -1537,7 +1537,11 @@ def student_payment(request, student_id):
                 student.registration_fee_paid = True
                 # Consider adding a date field for when registration fee was paid, e.g., student.registration_payment_date = timezone.now()
                 student.save()
-                # log_action call removed for student_payment (registration_fee_paid)
+                log_action(
+                    'registration_fee_paid',
+                    f"الطالب: {student.full_name}",
+                    f"تم دفع رسوم التسجيل بقيمة {REGISTRATION_FEE_AMOUNT} دج للطالب '{student.full_name}'."
+                )
                 messages.success(request, "تم تسجيل دفع رسوم التسجيل الأولية بنجاح.")
             else:
                 messages.info(request, "رسوم التسجيل الأولية مدفوعة بالفعل.")
@@ -1609,8 +1613,13 @@ def student_payment(request, student_id):
                             sessions_marked_paid_info.append(f"{session_obj.date.strftime('%Y-%m-%d')} ({session_obj.start_time.strftime('%H:%M')})")
 
                     if paid_this_transaction_count > 0:
+                        payment_amount = paid_this_transaction_count * (group_to_pay_for.price_per_4_sessions / Decimal('4.0'))
+                        log_action(
+                            'group_session_payment_processed',
+                            f"الطالب: {student.full_name}",
+                            f"دفع الطالب '{student.full_name}' مبلغ {payment_amount.quantize(Decimal('0.01'))} دج لـ {paid_this_transaction_count} حصص في فوج '{group_to_pay_for.name}'."
+                        )
                         messages.success(request, f"تم تسجيل دفع {paid_this_transaction_count} حصة/حصص بنجاح للفوج {group_to_pay_for.name}.")
-                        # log_action call removed for student_payment (group_session_payment_processed)
                         # For more detail: messages.info(request, f"الحصص التي تم دفعها: {', '.join(sessions_marked_paid_info)}")
                     elif sessions_to_pay_count > 0 : # Attempted to pay but none were eligible
                         messages.info(request, f"لا توجد حصص غير مدفوعة لتسجيلها حالياً للفوج {group_to_pay_for.name}.")
@@ -1783,8 +1792,13 @@ def teacher_payment(request, teacher_id):
                         updated_count += 1
 
                     if updated_count > 0:
+                        payment_amount = updated_count * TEACHER_PAY_PER_SESSION_AMOUNT
+                        log_action(
+                            'teacher_payment_processed',
+                            f"المدرس: {teacher.full_name}",
+                            f"تم دفع مستحقات للمدرس '{teacher.full_name}' بقيمة {payment_amount.quantize(Decimal('0.01'))} دج عن {updated_count} حصص في فوج '{group_to_compensate_for.name}'."
+                        )
                         messages.success(request, f"تم تسجيل دفع مستحقات لـ {updated_count} حصة/حصص للمدرس {teacher.full_name} في الفوج {group_to_compensate_for.name}.")
-                        # log_action call removed for teacher_payment
                     else:
                         messages.info(request, "لا توجد حصص مستحقة للدفع حالياً (تأكد من تسجيل حضور المدرس أولاً).")
 
@@ -2925,6 +2939,14 @@ def student_monthly_payment_view(request, student_id):
                     # This includes: initial use of prepaid, or adding remaining balance to prepaid.
                     if prepaid_used_this_transaction > Decimal('0.00') or (current_balance > Decimal('0.00') and current_price_per_session_post > Decimal('0.00')) :
                         student.save()
+
+                    # Log the payment action
+                    if sessions_paid_in_this_transaction_count > 0:
+                        log_action(
+                            'group_session_payment_processed',
+                            f"الطالب: {student.full_name}",
+                            f"دفع الطالب '{student.full_name}' مبلغ {amount_paid_from_form.quantize(Decimal('0.01'))} دج (استخدم رصيد مسبق: {prepaid_used_this_transaction.quantize(Decimal('0.01'))} دج) لـ {sessions_paid_in_this_transaction_count} حصص في فوج '{current_group_details_post.name}'."
+                        )
 
                     # Always try to generate a receipt URL if a payment was attempted
                     if amount_paid_from_form > Decimal('0.00') or prepaid_used_this_transaction > Decimal('0.00'):
