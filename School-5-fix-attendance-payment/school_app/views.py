@@ -1447,57 +1447,50 @@ def api_record_attendance(request):
 
         attendance.present = True
 
-        # --- Payment Logic ---
-        payment_status_message = "الحصة غير مدفوعة"
-        sound_signal = 'sound2' # Default for unpaid
+        # --- Refactored Payment Logic ---
         group = session.group
-        price_per_session = Decimal('0.00')
+        price_per_session = group.price_per_4_sessions / Decimal('4.0') if group.price_per_4_sessions and group.price_per_4_sessions > 0 else Decimal('0.00')
 
-        if group.price_per_4_sessions and group.price_per_4_sessions > 0:
-            price_per_session = group.price_per_4_sessions / Decimal('4.0')
+        # Get student-specific group info
+        enrollment_date = student_group_record.enrollment_date
+        is_free_enrollment = student_group_record.is_free
+        suspension_periods = list(StudentSuspension.objects.filter(student_group=student_group_record))
 
-        if price_per_session > 0:
-            enrollment_date = student_group_record.enrollment_date
-            is_free_enrollment = student_group_record.is_free
-            suspension_periods = list(StudentSuspension.objects.filter(student_group=student_group_record))
+        # Check conditions
+        is_already_paid = attendance.student_paid_for_session
+        has_enough_balance = student.prepaid_balance >= price_per_session
+        is_after_enrollment = enrollment_date is not None and session.date >= enrollment_date
+        is_suspended = any(s.start_date <= session.date and (s.end_date is None or session.date <= s.end_date) for s in suspension_periods)
 
-            is_already_paid = attendance.student_paid_for_session
-            has_enough_balance = student.prepaid_balance >= price_per_session
-            is_after_enrollment = enrollment_date is not None and session.date >= enrollment_date
-
-            is_suspended = False
-            for suspension in suspension_periods:
-                is_open_suspension = suspension.end_date is None
-                if suspension.start_date <= session.date and (is_open_suspension or session.date <= suspension.end_date):
-                    is_suspended = True
-                    break
-
-            if is_free_enrollment:
-                payment_status_message = "تسجيل مجاني"
-                sound_signal = 'sound3'
-            elif not is_already_paid and has_enough_balance and is_after_enrollment and not is_suspended:
-                student.prepaid_balance -= price_per_session
-                attendance.student_paid_for_session = True
-                student.save(update_fields=['prepaid_balance'])
-                payment_status_message = "الحصة مدفوعة بالفعل" # FIX: Unified payment message
-                sound_signal = 'sound1'
-            elif is_already_paid:
-                payment_status_message = "الحصة مدفوعة بالفعل"
-                sound_signal = 'sound1'
-            elif is_suspended:
-                payment_status_message = "لم يتم الخصم (فترة تجميد)"
-            elif enrollment_date and session.date < enrollment_date:
-                payment_status_message = "لم يتم الخصم (الحصة قبل تاريخ التسجيل)"
-            elif not has_enough_balance:
-                payment_status_message = f"رصيد غير كافٍ. الرصيد الحالي: {student.prepaid_balance.quantize(Decimal('0.01'))} دج"
-            # Default message remains "الحصة غير مدفوعة" if no other condition is met
-
-        elif attendance.student_paid_for_session:
-             payment_status_message = "الحصة مدفوعة بالفعل"
-             sound_signal = 'sound1'
-        else: # Price is zero
-             payment_status_message = "الحصة مجانية (السعر 0)"
-             sound_signal = 'sound1' # Or a neutral sound
+        # --- Start Decision Logic ---
+        if is_free_enrollment:
+            payment_status_message = "تسجيل مجاني"
+            sound_signal = 'sound3'
+        elif is_suspended:
+            payment_status_message = "لم يتم الخصم (فترة تجميد)"
+            sound_signal = 'sound2'
+        elif not is_after_enrollment:
+            payment_status_message = "لم يتم الخصم (الحصة قبل تاريخ التسجيل)"
+            sound_signal = 'sound2'
+        elif is_already_paid:
+            payment_status_message = "الحصة مدفوعة بالفعل"
+            sound_signal = 'sound1'
+        elif price_per_session > 0 and has_enough_balance:
+            student.prepaid_balance -= price_per_session
+            attendance.student_paid_for_session = True
+            student.save(update_fields=['prepaid_balance'])
+            payment_status_message = "تم الدفع بنجاح"
+            sound_signal = 'sound1'
+        elif price_per_session > 0 and not has_enough_balance:
+            payment_status_message = f"رصيد غير كافٍ. الرصيد الحالي: {student.prepaid_balance.quantize(Decimal('0.01'))} دج"
+            sound_signal = 'sound2'
+        elif price_per_session <= 0:
+            payment_status_message = "الحصة مجانية (السعر 0)"
+            sound_signal = 'sound1'
+        else:
+            # Fallback for any other unpaid case
+            payment_status_message = "الحصة غير مدفوعة"
+            sound_signal = 'sound2'
 
         attendance.save()
 
@@ -2461,56 +2454,50 @@ def api_record_attendance_by_student(request):
 
         attendance.present = True
 
-        # --- Payment Logic ---
-        payment_status_message = "الحصة غير مدفوعة"
-        sound_signal = 'sound2'
+        # --- Refactored Payment Logic ---
         group = target_session.group
-        price_per_session = Decimal('0.00')
+        price_per_session = group.price_per_4_sessions / Decimal('4.0') if group.price_per_4_sessions and group.price_per_4_sessions > 0 else Decimal('0.00')
 
-        if group.price_per_4_sessions and group.price_per_4_sessions > 0:
-            price_per_session = group.price_per_4_sessions / Decimal('4.0')
+        # Get student-specific group info
+        enrollment_date = student_group_record.enrollment_date
+        is_free_enrollment = student_group_record.is_free
+        suspension_periods = list(StudentSuspension.objects.filter(student_group=student_group_record))
 
-        if price_per_session > 0:
-            enrollment_date = student_group_record.enrollment_date
-            is_free_enrollment = student_group_record.is_free
-            suspension_periods = list(StudentSuspension.objects.filter(student_group=student_group_record))
+        # Check conditions
+        is_already_paid = attendance.student_paid_for_session
+        has_enough_balance = student.prepaid_balance >= price_per_session
+        is_after_enrollment = enrollment_date is not None and target_session.date >= enrollment_date
+        is_suspended = any(s.start_date <= target_session.date and (s.end_date is None or target_session.date <= s.end_date) for s in suspension_periods)
 
-            is_already_paid = attendance.student_paid_for_session
-            has_enough_balance = student.prepaid_balance >= price_per_session
-            is_after_enrollment = enrollment_date is not None and target_session.date >= enrollment_date
-
-            is_suspended = False
-            for suspension in suspension_periods:
-                is_open_suspension = suspension.end_date is None
-                if suspension.start_date <= target_session.date and (is_open_suspension or target_session.date <= suspension.end_date):
-                    is_suspended = True
-                    break
-
-            if is_free_enrollment:
-                payment_status_message = "تسجيل مجاني"
-                sound_signal = 'sound3'
-            elif not is_already_paid and has_enough_balance and is_after_enrollment and not is_suspended:
-                student.prepaid_balance -= price_per_session
-                attendance.student_paid_for_session = True
-                student.save(update_fields=['prepaid_balance'])
-                payment_status_message = "الحصة مدفوعة بالفعل" # FIX: Unified payment message
-                sound_signal = 'sound1'
-            elif is_already_paid:
-                payment_status_message = "الحصة مدفوعة بالفعل"
-                sound_signal = 'sound1'
-            elif is_suspended:
-                payment_status_message = "لم يتم الخصم (فترة تجميد)"
-            elif enrollment_date and target_session.date < enrollment_date:
-                payment_status_message = "لم يتم الخصم (الحصة قبل تاريخ التسجيل)"
-            elif not has_enough_balance:
-                payment_status_message = f"رصيد غير كافٍ. الرصيد الحالي: {student.prepaid_balance.quantize(Decimal('0.01'))} دج"
-
-        elif attendance.student_paid_for_session:
-             payment_status_message = "الحصة مدفوعة بالفعل"
-             sound_signal = 'sound1'
-        else: # Price is zero
-             payment_status_message = "الحصة مجانية (السعر 0)"
-             sound_signal = 'sound1'
+        # --- Start Decision Logic ---
+        if is_free_enrollment:
+            payment_status_message = "تسجيل مجاني"
+            sound_signal = 'sound3'
+        elif is_suspended:
+            payment_status_message = "لم يتم الخصم (فترة تجميد)"
+            sound_signal = 'sound2'
+        elif not is_after_enrollment:
+            payment_status_message = "لم يتم الخصم (الحصة قبل تاريخ التسجيل)"
+            sound_signal = 'sound2'
+        elif is_already_paid:
+            payment_status_message = "الحصة مدفوعة بالفعل"
+            sound_signal = 'sound1'
+        elif price_per_session > 0 and has_enough_balance:
+            student.prepaid_balance -= price_per_session
+            attendance.student_paid_for_session = True
+            student.save(update_fields=['prepaid_balance'])
+            payment_status_message = "تم الدفع بنجاح"
+            sound_signal = 'sound1'
+        elif price_per_session > 0 and not has_enough_balance:
+            payment_status_message = f"رصيد غير كافٍ. الرصيد الحالي: {student.prepaid_balance.quantize(Decimal('0.01'))} دج"
+            sound_signal = 'sound2'
+        elif price_per_session <= 0:
+            payment_status_message = "الحصة مجانية (السعر 0)"
+            sound_signal = 'sound1'
+        else:
+            # Fallback for any other unpaid case
+            payment_status_message = "الحصة غير مدفوعة"
+            sound_signal = 'sound2'
 
         attendance.save()
 
