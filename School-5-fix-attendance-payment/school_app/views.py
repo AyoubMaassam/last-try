@@ -1431,7 +1431,7 @@ def api_record_attendance(request):
             status = 'already_registered'
 
             if student_group_record.is_free:
-                payment_status_message = "تسجيل مجاني"
+                payment_status_message = "الحصة مدفوعة بالفعل"
                 sound_signal = 'sound1'
                 status = 'success'
             elif attendance.student_paid_for_session:
@@ -1476,8 +1476,8 @@ def api_record_attendance(request):
                     break
 
             if is_free_enrollment:
-                payment_status_message = "تسجيل مجاني"
-                sound_signal = 'sound1' # FIX: Changed from sound3 to sound1
+                payment_status_message = "الحصة مدفوعة بالفعل"
+                sound_signal = 'sound1'
             elif not is_already_paid and has_enough_balance and is_after_enrollment and not is_suspended:
                 student.prepaid_balance -= price_per_session
                 attendance.student_paid_for_session = True
@@ -2425,7 +2425,7 @@ def api_record_attendance_by_student(request):
             status = 'already_registered' # Default status for this case
 
             if student_group_record.is_free:
-                payment_status_message = "تسجيل مجاني"
+                payment_status_message = "الحصة مدفوعة بالفعل"
                 sound_signal = 'sound1'
                 status = 'success'
             elif attendance.student_paid_for_session:
@@ -2470,8 +2470,8 @@ def api_record_attendance_by_student(request):
                     break
 
             if is_free_enrollment:
-                payment_status_message = "تسجيل مجاني"
-                sound_signal = 'sound1' # FIX: Changed from sound3 to sound1
+                payment_status_message = "الحصة مدفوعة بالفعل"
+                sound_signal = 'sound1'
             elif not is_already_paid and has_enough_balance and is_after_enrollment and not is_suspended:
                 student.prepaid_balance -= price_per_session
                 attendance.student_paid_for_session = True
