@@ -1426,22 +1426,25 @@ def api_record_attendance(request):
 
         # <<< FIX: Handle already registered case with free status and sound >>>
         if not created and attendance.present:
-            payment_status = "الحصة لم تدفع بعد"
+            payment_status_message = "الحصة لم تدفع بعد"
             sound_signal = 'sound2' # Default for already registered but unpaid
+            status = 'already_registered'
 
             if student_group_record.is_free:
-                payment_status = "تسجيل مجاني"
-                sound_signal = 'sound1' # FIX: Changed from sound3 to sound1
-            elif attendance.student_paid_for_session:
-                payment_status = "الحصة مدفوعة بالفعل"
+                payment_status_message = "تسجيل مجاني"
                 sound_signal = 'sound1'
+                status = 'success'
+            elif attendance.student_paid_for_session:
+                payment_status_message = "الحصة مدفوعة بالفعل"
+                sound_signal = 'sound1'
+                status = 'success'
 
             return JsonResponse({
-                'status': 'already_registered',
+                'status': status,
                 'message': f'الطالب {student.full_name} مسجل بالفعل في هذه الحصة.',
                 'student_name': student.full_name,
                 'session_info': f'{session.group.name} - {session.date} {session.start_time.strftime("%H:%M")}',
-                'payment_status': payment_status,
+                'payment_status_message': payment_status_message,
                 'sound': sound_signal,
             }, status=200)
 
@@ -1517,7 +1520,7 @@ def api_record_attendance(request):
             'message': 'تم تسجيل الحضور بنجاح.',
             'student_name': student.full_name,
             'session_info': f'{session.group.name} - {session.date} {session.start_time.strftime("%H:%M")}',
-            'payment_status': payment_status_message,
+            'payment_status_message': payment_status_message,
             'sound': sound_signal,
             'attendance_time': attendance.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             'unpaid_sessions_count': unpaid_sessions_count
@@ -2419,16 +2422,19 @@ def api_record_attendance_by_student(request):
         if not created and attendance.present:
             payment_status_message = "الحصة لم تدفع بعد"
             sound_signal = 'sound2'
+            status = 'already_registered' # Default status for this case
 
             if student_group_record.is_free:
                 payment_status_message = "تسجيل مجاني"
-                sound_signal = 'sound1' # FIX: Changed from sound3 to sound1
+                sound_signal = 'sound1'
+                status = 'success'
             elif attendance.student_paid_for_session:
                 payment_status_message = "الحصة مدفوعة بالفعل"
                 sound_signal = 'sound1'
+                status = 'success'
 
             return JsonResponse({
-                'status': 'already_registered',
+                'status': status,
                 'message': f'الطالب {student.full_name} مسجل بالفعل في هذه الحصة.',
                 'student_name': student.full_name,
                 'session_info': f'{target_session.group.name} - {target_session.date}',
